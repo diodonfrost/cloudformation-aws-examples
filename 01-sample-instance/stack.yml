@@ -106,6 +106,10 @@ Resources:
           !Sub |
             #!/bin/bash
             echo "hello world" > /tmp/hello.txt
+      Tags:
+        -
+          Key: "Name"
+          Value: "http-instance"
 
   EipHttp:
     Type: AWS::EC2::EIP
