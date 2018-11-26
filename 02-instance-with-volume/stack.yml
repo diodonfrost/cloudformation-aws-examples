@@ -8,12 +8,8 @@ Parameters:
     Description: "set vpc cidr network"
     Type: String
     Default: "192.168.0.0/16"
-  SubnetName:
-    Description: "set subnet name"
-    Type: String
-    Default: "subnet_http"
-  SubnetCidr:
-    Description: "set subnet cidr"
+  SubnetCidrHttp:
+    Description: "set http subnet cidr"
     Type: String
     Default: "192.168.1.0/24"
 
@@ -53,7 +49,6 @@ Resources:
       SecurityGroupIngress:
         -
           IpProtocol: tcp
-          FromPort: '22'
           ToPort: '22'
           CidrIp: 0.0.0.0/0
         -
@@ -77,14 +72,31 @@ Resources:
       SecurityGroupIngress:
         -
           IpProtocol: tcp
-          FromPort: '80'
           ToPort: '80'
           CidrIp: 0.0.0.0/0
         -
           IpProtocol: tcp
-          FromPort: '443'
           ToPort: '443'
           CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        -
+          IpProtocol: '-1'
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+
+  SecurityGroupDb:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: web
+      GroupDescription: Allow web incgress trafic
+      VpcId:
+        Ref: VpcHttp
+      SecurityGroupIngress:
+        -
+          IpProtocol: tcp
+          ToPort: '3306'
+          CidrIp: 0.0.0.0/0
+
       SecurityGroupEgress:
         -
           IpProtocol: '-1'
