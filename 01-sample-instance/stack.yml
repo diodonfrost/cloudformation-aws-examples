@@ -8,10 +8,6 @@ Parameters:
     Description: "set vpc cidr network"
     Type: String
     Default: "192.168.0.0/16"
-  SubnetName:
-    Description: "set subnet name"
-    Type: String
-    Default: "subnet_http"
   SubnetCidr:
     Description: "set subnet cidr"
     Type: String
@@ -53,6 +49,7 @@ Resources:
       SecurityGroupIngress:
         -
           IpProtocol: tcp
+          FromPort: '22'
           ToPort: '22'
           CidrIp: 0.0.0.0/0
         -
@@ -76,10 +73,12 @@ Resources:
       SecurityGroupIngress:
         -
           IpProtocol: tcp
+          FromPort: '80'
           ToPort: '80'
           CidrIp: 0.0.0.0/0
         -
           IpProtocol: tcp
+          FromPort: '443'
           ToPort: '443'
           CidrIp: 0.0.0.0/0
       SecurityGroupEgress:
