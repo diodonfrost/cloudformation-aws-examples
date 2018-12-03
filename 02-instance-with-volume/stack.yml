@@ -49,6 +49,7 @@ Resources:
       SecurityGroupIngress:
         -
           IpProtocol: tcp
+          FromPort: '22'
           ToPort: '22'
           CidrIp: 0.0.0.0/0
         -
@@ -72,10 +73,12 @@ Resources:
       SecurityGroupIngress:
         -
           IpProtocol: tcp
+          FromPort: '80'
           ToPort: '80'
           CidrIp: 0.0.0.0/0
         -
           IpProtocol: tcp
+          FromPort: '443'
           ToPort: '443'
           CidrIp: 0.0.0.0/0
       SecurityGroupEgress:
@@ -94,6 +97,7 @@ Resources:
       SecurityGroupIngress:
         -
           IpProtocol: tcp
+          FromPort: '3306'
           ToPort: '3306'
           CidrIp: 0.0.0.0/0
 
