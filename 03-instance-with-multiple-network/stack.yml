@@ -1,0 +1,196 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Parameters:
+  Ami:
+    Description: "Set ec2 AMI"
+    Type: String
+    Default: "ami-051707cdba246187b"
+  VpcCidr:
+    Description: "set vpc cidr network"
+    Type: String
+    Default: "192.168.0.0/16"
+  SubnetCidrHttp:
+    Description: "set http subnet cidr"
+    Type: String
+    Default: "192.168.1.0/24"
+  SubnetCidrDb:
+    Description: "set db subnet cidr"
+    Type: String
+    Default: "192.168.2.0/24"
+
+Resources:
+  VpcHttp:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: True
+
+  SubnetHttp:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VpcHttp
+      CidrBlock:
+        Ref: SubnetCidrHttp
+
+  SubnetDb:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VpcHttp
+      CidrBlock:
+        Ref: SubnetCidrDb
+
+  InternetGatewayHttp:
+    Type: AWS::EC2::InternetGateway
+
+  VpcGatewayAttachementHttp:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId:
+        Ref: InternetGatewayHttp
+      VpcId:
+        Ref: VpcHttp
+
+  SecurityGroupAdministration:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: administration
+      GroupDescription: Allow default administration service
+      VpcId:
+        Ref: VpcHttp
+      SecurityGroupIngress:
+        -
+          IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0
+        -
+          IpProtocol: icmp
+          FromPort: '8'
+          ToPort: '0'
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        -
+          IpProtocol: '-1'
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+
+  SecurityGroupWeb:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: web
+      GroupDescription: Allow web incgress trafic
+      VpcId:
+        Ref: VpcHttp
+      SecurityGroupIngress:
+        -
+          IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: 0.0.0.0/0
+        -
+          IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        -
+          IpProtocol: '-1'
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+
+  SecurityGroupDb:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: database
+      GroupDescription: Allow web incgress trafic
+      VpcId:
+        Ref: VpcHttp
+      SecurityGroupIngress:
+        -
+          IpProtocol: tcp
+          FromPort: '3306'
+          ToPort: '3306'
+          CidrIp: 0.0.0.0/0
+
+      SecurityGroupEgress:
+        -
+          IpProtocol: '-1'
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+
+  InstanceHttp:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref Ami
+      InstanceType: t2.micro
+      KeyName: user-key
+      SubnetId:
+        Ref: SubnetHttp
+      SecurityGroupIds:
+        - Ref: SecurityGroupAdministration
+        - Ref: SecurityGroupWeb
+      UserData:
+        "Fn::Base64":
+          !Sub |
+            #!/bin/bash
+            echo "hello world" > /tmp/hello.txt
+      Tags:
+        -
+          Key: "Name"
+          Value: "http-instance"
+
+  EipHttp:
+    Type: AWS::EC2::EIP
+    Properties:
+      InstanceId:
+        Ref: InstanceHttp
+
+  InstanceDb:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref Ami
+      InstanceType: t2.micro
+      KeyName: user-key
+      SubnetId:
+        Ref: SubnetDb
+      SecurityGroupIds:
+        - Ref: SecurityGroupAdministration
+        - Ref: SecurityGroupDb
+      UserData:
+        "Fn::Base64":
+          !Sub |
+            #!/bin/bash
+            echo "hello world" > /tmp/hello.txt
+      Tags:
+        -
+          Key: "Name"
+          Value: "db-instance"
+
+  RouteTableHttp:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: VpcHttp
+
+  RouteHttp:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: "0.0.0.0/0"
+      GatewayId:
+        Ref: InternetGatewayHttp
+      RouteTableId:
+        Ref: RouteTableHttp
+
+  SubnetRouteAssociationHttp:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: RouteTableHttp
+      SubnetId:
+        Ref: SubnetHttp
+
+Outputs:
+  httpIp:
+    Description: "Public http instance IP"
+    Value: !Ref EipHttp
