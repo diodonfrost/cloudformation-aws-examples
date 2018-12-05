@@ -1,0 +1,253 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Parameters:
+  Ami:
+    Description: "Set ec2 AMI"
+    Type: String
+    Default: "ami-051707cdba246187b"
+  VpcCidr:
+    Description: "set vpc cidr network"
+    Type: String
+    Default: "192.168.0.0/16"
+  SubnetCidrHttp:
+    Description: "set http subnet cidr"
+    Type: String
+    Default: "192.168.1.0/24"
+  SubnetCidrDb:
+    Description: "set db subnet cidr"
+    Type: String
+    Default: "192.168.2.0/24"
+
+Resources:
+  VpcHttp:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: True
+
+  SubnetHttp:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VpcHttp
+      CidrBlock:
+        Ref: SubnetCidrHttp
+
+  SubnetDb:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VpcHttp
+      CidrBlock:
+        Ref: SubnetCidrDb
+
+  InternetGatewayHttp:
+    Type: AWS::EC2::InternetGateway
+
+  VpcGatewayAttachementHttp:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId:
+        Ref: InternetGatewayHttp
+      VpcId:
+        Ref: VpcHttp
+
+  SecurityGroupAdministration:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: administration
+      GroupDescription: Allow default administration service
+      VpcId:
+        Ref: VpcHttp
+      SecurityGroupIngress:
+        -
+          IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0
+        -
+          IpProtocol: icmp
+          FromPort: '8'
+          ToPort: '0'
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        -
+          IpProtocol: '-1'
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+
+  SecurityGroupWeb:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: web
+      GroupDescription: Allow web incgress trafic
+      VpcId:
+        Ref: VpcHttp
+      SecurityGroupIngress:
+        -
+          IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: 0.0.0.0/0
+        -
+          IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        -
+          IpProtocol: '-1'
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+
+  SecurityGroupDb:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: database
+      GroupDescription: Allow web incgress trafic
+      VpcId:
+        Ref: VpcHttp
+      SecurityGroupIngress:
+        -
+          IpProtocol: tcp
+          FromPort: '3306'
+          ToPort: '3306'
+          CidrIp: 0.0.0.0/0
+
+      SecurityGroupEgress:
+        -
+          IpProtocol: '-1'
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+
+##################
+#
+# HTTP
+#
+##################
+
+  LoadBalancerHttp:
+    Type: AWS::ElasticLoadBalancing::LoadBalancer
+    Properties:
+      Subnets:
+        - Ref: SubnetHttp
+      Listeners:
+      - LoadBalancerPort: '80'
+        InstancePort: '80'
+        Protocol: HTTP
+      HealthCheck:
+        Target: HTTP:80/
+        HealthyThreshold: '2'
+        UnhealthyThreshold: '2'
+        Interval: '30'
+        Timeout: '3'
+      SecurityGroups:
+        - Ref: SecurityGroupAdministration
+        - Ref: SecurityGroupWeb
+      Tags:
+      -
+        Key: "Name"
+        Value: "http-loadbalancer"
+
+  LaunchConfigHttp:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      AssociatePublicIpAddress: false
+      InstanceType: t2.micro
+      KeyName: user-key
+      ImageId: !Ref Ami
+      SecurityGroups:
+        - Ref: SecurityGroupAdministration
+        - Ref: SecurityGroupWeb
+      UserData:
+       "Fn::Base64":
+         !Sub |
+           #!/bin/bash
+           sudo yum install httpd -y
+           sudo systemctl start httpd
+           sudo systemctl enable httpd
+
+  AutoScalingHttp:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: http-autoscaling-group
+      MaxSize: 10
+      MinSize: 2
+      DesiredCapacity: 2
+      HealthCheckType: ELB
+      Cooldown: 30
+      HealthCheckGracePeriod: 120
+      LaunchConfigurationName:
+        Ref: LaunchConfigHttp
+      LoadBalancerNames:
+        - Ref: LoadBalancerHttp
+      TerminationPolicies:
+        - OldestLaunchConfiguration
+      VPCZoneIdentifier:
+        - Ref: SubnetHttp
+
+##################
+#
+# DB
+#
+##################
+
+  LoadBalancerDb:
+    Type: AWS::ElasticLoadBalancing::LoadBalancer
+    Properties:
+      Scheme: internal
+      Subnets:
+        - Ref: SubnetDb
+      Listeners:
+      - LoadBalancerPort: '3306'
+        InstancePort: '3306'
+        Protocol: tcp
+      HealthCheck:
+        Target: TCP:3306
+        HealthyThreshold: '2'
+        UnhealthyThreshold: '2'
+        Interval: '30'
+        Timeout: '3'
+      SecurityGroups:
+        - Ref: SecurityGroupAdministration
+        - Ref: SecurityGroupDb
+      Tags:
+      -
+        Key: "Name"
+        Value: "db-loadbalancer"
+
+  LaunchConfigDb:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      AssociatePublicIpAddress: false
+      InstanceType: t2.micro
+      KeyName: user-key
+      ImageId: !Ref Ami
+      SecurityGroups:
+        - Ref: SecurityGroupAdministration
+        - Ref: SecurityGroupDb
+      UserData:
+       "Fn::Base64":
+         !Sub |
+           #!/bin/bash
+           sudo yum install mariadb-server -y
+           sudo systemctl start mariadb
+           sudo systemctl enable mariadb
+
+  AutoScalingDb:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: db-autoscaling-group
+      MaxSize: 10
+      MinSize: 2
+      DesiredCapacity: 3
+      HealthCheckType: ELB
+      Cooldown: 30
+      HealthCheckGracePeriod: 120
+      LaunchConfigurationName:
+        Ref: LaunchConfigDb
+      LoadBalancerNames:
+        - Ref: LoadBalancerDb
+      TerminationPolicies:
+        - OldestLaunchConfiguration
+      VPCZoneIdentifier:
+        - Ref: SubnetDb
